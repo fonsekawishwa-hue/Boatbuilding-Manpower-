@@ -602,7 +602,7 @@
       $("pdfNavBtn").addEventListener("click", () => {
         let rows = workers.map(w => {
           let photoMarkup = w.profilePhoto 
-            ? '<img class="pdf-photo" src="' + w.profilePhoto + '" />' 
+            ? '<img class="pdf-photo" src="' + w.profilePhoto + '" style="width:40px;height:40px;border-radius:50%;" />' 
             : '<div class="pdf-photo-fallback">' + initials(w.fullName) + '</div>';
             
           return `<tr>
@@ -617,18 +617,26 @@
         }).join("");
 
         const reportEl = document.getElementById("printReport");
+        
         reportEl.innerHTML = `
-          <h1>BY WELISARA - Manpower Roster Report</h1>
-          <p>Generated on ${new Date().toLocaleDateString()} · Active Cloud Sync Database Summary</p>
-          <table>
-            <thead>
-              <tr><th>Photo</th><th>Name</th><th>Discipline</th><th>Location</th><th>Phone Line</th><th>Experience</th><th>Availability</th></tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
+          <div style="padding: 20px; font-family: sans-serif; color: #333;">
+            <h1 style="margin-bottom: 5px; color: #004d40;">BY WELISARA - Manpower Roster Report</h1>
+            <p style="margin-top: 0; color: #666; font-size: 14px;">Generated on ${new Date().toLocaleDateString()} · Active Cloud Sync Database Summary</p>
+            <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse; margin-top: 20px; text-align: left;">
+              <thead style="background-color: #f5f5f5;">
+                <tr><th>Photo</th><th>Name</th><th>Discipline</th><th>Location</th><th>Phone Line</th><th>Experience</th><th>Availability</th></tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
         `;
         
+        reportEl.style.setProperty("display", "block", "important");
         window.print();
+        
+        setTimeout(() => {
+          reportEl.style.setProperty("display", "none", "important");
+        }, 500);
       });
 
       // Authentication Session UI Guard
