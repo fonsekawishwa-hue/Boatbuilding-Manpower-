@@ -598,45 +598,58 @@
         saveWorkerToCloud(workerObj);
       });
 
-     // Report PDF Generation Setup
+    // Report PDF Generation Setup
       $("pdfNavBtn").addEventListener("click", () => {
         let rows = workers.map(w => {
           let photoMarkup = w.profilePhoto 
-            ? '<img class="pdf-photo" src="' + w.profilePhoto + '" style="width:40px;height:40px;border-radius:50%;" />' 
-            : '<div class="pdf-photo-fallback">' + initials(w.fullName) + '</div>';
+            ? `<img src="${w.profilePhoto}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;" />` 
+            : `<div style="width:40px;height:40px;border-radius:50%;background:#004d40;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:14px;">${initials(w.fullName)}</div>`;
             
           return `<tr>
-            <td>${photoMarkup}</td>
-            <td><strong>${w.fullName}</strong></td>
-            <td>${label(professions, w.professionId)}</td>
-            <td>${w.city}, ${label(districts, w.districtId)}</td>
-            <td>${w.phone}</td>
-            <td>${w.experienceYears || 0} Yrs</td>
-            <td>${w.availabilityStatus}</td>
+            <td style="padding:10px; border:1px solid #ddd; text-align:center;">${photoMarkup}</td>
+            <td style="padding:10px; border:1px solid #ddd;"><strong>${w.fullName}</strong></td>
+            <td style="padding:10px; border:1px solid #ddd;">${label(professions, w.professionId)}</td>
+            <td style="padding:10px; border:1px solid #ddd;">${w.city}, ${label(districts, w.districtId)}</td>
+            <td style="padding:10px; border:1px solid #ddd;">${w.phone}</td>
+            <td style="padding:10px; border:1px solid #ddd;">${w.experienceYears || 0} Yrs</td>
+            <td style="padding:10px; border:1px solid #ddd;">${w.availabilityStatus}</td>
           </tr>`;
         }).join("");
 
-        const reportEl = document.getElementById("printReport");
-        
-        reportEl.innerHTML = `
-          <div style="padding: 20px; font-family: sans-serif; color: #333;">
-            <h1 style="margin-bottom: 5px; color: #004d40;">BY WELISARA - Manpower Roster Report</h1>
-            <p style="margin-top: 0; color: #666; font-size: 14px;">Generated on ${new Date().toLocaleDateString()} · Active Cloud Sync Database Summary</p>
-            <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse; margin-top: 20px; text-align: left;">
-              <thead style="background-color: #f5f5f5;">
-                <tr><th>Photo</th><th>Name</th><th>Discipline</th><th>Location</th><th>Phone Line</th><th>Experience</th><th>Availability</th></tr>
-              </thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </div>
-        `;
-        
-        reportEl.style.setProperty("display", "block", "important");
-        window.print();
-        
-        setTimeout(() => {
-          reportEl.style.setProperty("display", "none", "important");
-        }, 500);
+        // Create a completely clean print window to bypass any hidden page CSS constraints
+        const printWindow = window.open("", "_blank");
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>BY WELISARA - Manpower Roster Report</title>
+              <style>
+                body { font-family: system-ui, sans-serif; color: #333; padding: 20px; }
+                h1 { color: #004d40; margin-bottom: 5px; }
+                p { color: #666; margin-top: 0; font-size: 14px; margin-bottom: 30px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th { background-color: #004d40; color: white; padding: 12px; text-align: left; border: 1px solid #004d40; }
+              </style>
+            </head>
+            <body>
+              <h1>BY WELISARA - Manpower Roster Report</h1>
+              <p>Generated on ${new Date().toLocaleDateString()} · Active Cloud Sync Database Summary</p>
+              <table>
+                <thead>
+                  <tr><th>Photo</th><th>Name</th><th>Discipline</th><th>Location</th><th>Phone Line</th><th>Experience</th><th>Availability</th></tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+              <script>
+                // Auto-trigger printing view once images and tables are laid out, then close tab
+                window.onload = function() {
+                  window.print();
+                  setTimeout(() => { window.close(); }, 300);
+                };
+              <\/script>
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
       });
 
       // Authentication Session UI Guard
