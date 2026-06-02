@@ -598,7 +598,7 @@
         saveWorkerToCloud(workerObj);
       });
 
-      // Report PDF Generation Setup
+     // Report PDF Generation Setup
       $("pdfNavBtn").addEventListener("click", () => {
         let rows = workers.map(w => {
           let photoMarkup = w.profilePhoto 
@@ -630,7 +630,6 @@
         
         window.print();
       });
-       
 
       // Authentication Session UI Guard
       function updateAuthUi() {
