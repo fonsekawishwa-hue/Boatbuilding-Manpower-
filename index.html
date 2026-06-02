@@ -232,28 +232,29 @@
           <div>
             <div class="eyebrow">Admin</div>
             <h1 id="editTitle">Add worker</h1>
-            <p class="lead">This preview saves edits in browser memory only. The Next.js app has the Prisma schema ready for real database storage.</p>
+            <p class="lead">This dashboard saves directly to your live cloud Firebase database infrastructure instantly.</p>
           </div>
           <button class="btn light" data-close>Close</button>
         </div>
         <form class="form-grid" id="workerForm">
+          <input type="hidden" name="id" id="editWorkerId" />
           <label>Full name<input name="fullName" required /></label>
           <label>Phone<input name="phone" required /></label>
-          <label style="grid-column:1/-1">Profile picture<input name="profilePhoto" type="file" accept="image/*" /></label>
-          <label>District<select name="districtId"></select></label>
-          <label>Profession<select name="professionId"></select></label>
-          <label>Town<select name="city"></select></label>
+          <label style="grid-column:1/-1">Profile picture URL link<input name="profilePhoto" type="text" placeholder="https://example.com/photo.jpg" /></label>
+          <label>District<select name="districtId" id="formDistrict"></select></label>
+          <label>Profession<select name="professionId" id="formProfession"></select></label>
+          <label>Town/City<select name="city" id="formCity"></select></label>
           <label>Experience years<input name="experienceYears" type="number" /></label>
           <label>Availability<select name="availabilityStatus"><option>AVAILABLE</option><option>BUSY</option><option>UNKNOWN</option></select></label>
           <label>Status<select name="workerStatus"><option>ACTIVE</option><option>RETIRED</option><option>INACTIVE</option></select></label>
-          <label style="grid-column:1/-1">Skills<textarea name="skills"></textarea></label>
+          <label style="grid-column:1/-1">Skills (comma separated)<textarea name="skills" placeholder="Welding, Fabrication, Fiberglass"></textarea></label>
           <label style="grid-column:1/-1">Bio<textarea name="bio"></textarea></label>
           <button class="btn navy" style="grid-column:1/-1" type="submit">Save worker</button>
         </form>
       </div>
     </div>
 
-    <div class="toast" id="toast">Saved in preview</div>
+    <div class="toast" id="toast">Saved successfully!</div>
     <div id="printReport" style="display:none"></div>
 
     <div class="modal" id="loginModal">
@@ -268,7 +269,25 @@
       </div>
     </div>
 
-    <script>
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+      import { getDatabase, ref, onValue, set, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyBITDiaTaJMDkcg149bYghPkh_I79elAiw",
+        authDomain: "boatbuilders-2d6a9.firebaseapp.com",
+        databaseURL: "https://boatbuilders-2d6a9-default-rtdb.firebaseio.com",
+        projectId: "boatbuilders-2d6a9",
+        storageBucket: "boatbuilders-2d6a9.firebasestorage.app",
+        messagingSenderId: "1060992672345",
+        appId: "1:1060992672345:web:3d813eb5ba18eae3ec748",
+        measurementId: "G-S5VFZN7DQ6"
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const db = getDatabase(app);
+      const workersRef = ref(db, 'workers');
+
       const professions = [
         ["welder", "Welder"], ["fabricator", "Fabricator"], ["carpenter", "Marine Carpenter"],
         ["painter", "Painter"], ["electrician", "Marine Electrician"], ["mechanic", "Marine Mechanic"],
@@ -333,43 +352,66 @@
         { id:"w-024", fullName:"LME PAB Perera", phone:"0701031448", whatsapp:"94701031448", districtId:"colombo", city:"Colombo", latitude:6.9271, longitude:79.8612, professionId:"fiber", experienceYears:0, bio:"Fiber Works. In service.", availabilityStatus:"AVAILABLE", workerStatus:"ACTIVE", isVerified:false, skills:["Fiber Works"] },
         { id:"w-025", fullName:"LME KPVR Jayakodi", phone:"0789397927", whatsapp:"94789397927", districtId:"gampaha", city:"Mirigama", latitude:7.2414, longitude:80.1325, professionId:"fiber", experienceYears:0, bio:"Fiber Works. In service.", availabilityStatus:"AVAILABLE", workerStatus:"ACTIVE", isVerified:false, skills:["Fiber Works"] }
       ];
-      let workers = JSON.parse(localStorage.getItem("byWelisaraWorkers") || "null") || defaultWorkers;
+
+      let workers = [];
       let currentUser = localStorage.getItem("byWelisaraUserEmail") || "";
+
       const $ = (id) => document.getElementById(id);
       const label = (list, id) => (list.find(item => item[0] === id) || ["", id])[1];
       const townByName = (name) => towns.find(t => t[1] === name);
       const initials = (name) => name.split(" ").map(p => p[0]).join("").slice(0,2).toUpperCase();
-      const mapsUrl = (w) => `https://www.google.com/maps/search/?api=1&query=${w.latitude},${w.longitude}`;
+      const mapsUrl = (w) => `https://maps.google.com/?q=${w.latitude},${w.longitude}`;
       const mapsEmbedUrl = (w) => `https://maps.google.com/maps?q=${w.latitude},${w.longitude}&z=13&output=embed`;
-      const saveWorkers = () => localStorage.setItem("byWelisaraWorkers", JSON.stringify(workers));
-      const fileToDataUrl = (file) => new Promise((resolve, reject) => {
-        if (!file) {
-          resolve("");
-          return;
+
+      // Synchronize with Firebase Realtime Database
+      onValue(workersRef, (snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+          // If database is completely empty, populate it with defaults
+          set(workersRef, defaultWorkers);
+          workers = defaultWorkers;
+        } else {
+          // Handle object conversion to indexed arrays if necessary
+          workers = Array.isArray(data) ? data : Object.values(data);
         }
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
+        initAppLogic();
       });
+
+      function saveWorkerToCloud(workerData) {
+        if (!workerData.id) {
+          workerData.id = "w-" + Date.now();
+          workers.push(workerData);
+        } else {
+          const index = workers.findIndex(w => w.id === workerData.id);
+          if (index !== -1) workers[index] = workerData;
+        }
+        set(workersRef, workers).then(() => {
+          showToast();
+          $("editModal").classList.remove("open");
+        });
+      }
+
       function workerCard(w) {
         const availableClass = w.availabilityStatus === "AVAILABLE" ? "available" : w.availabilityStatus === "BUSY" ? "busy" : "unknown";
         const statusClass = w.workerStatus === "RETIRED" ? "retired" : "active-status";
         const photo = w.profilePhoto ? `<img alt="${w.fullName}" src="${w.profilePhoto}">` : initials(w.fullName);
         return `<article class="worker" data-id="${w.id}">
-          <div class="worker-head"><div class="avatar">${photo}</div><div><h2>${w.fullName}</h2><p class="trade">${label(professions,w.professionId)}</p><p class="meta">${w.city}, ${label(districts,w.districtId)} · ${w.experienceYears} yrs</p></div></div>
-          <p class="bio">${w.bio}</p>
+          <div class="worker-head"><div class="avatar">${photo}</div><div><h2>${w.fullName}</h2><p class="trade">${label(professions,w.professionId)}</p><p class="meta">${w.city}, ${label(districts,w.districtId)} · ${w.experienceYears || 0} yrs</p></div></div>
+          <p class="bio">${w.bio || ''}</p>
           <div class="badges"><span class="badge ${availableClass}">${w.availabilityStatus}</span><span class="badge ${statusClass}">${w.workerStatus}</span>${w.isVerified ? '<span class="badge verified">Verified</span>' : ''}</div>
-          <div class="skills">${w.skills.map(s => `<span class="skill">${s}</span>`).join("")}</div>
+          <div class="skills">${(w.skills || []).map(s => `<span class="skill">${s}</span>`).join("")}</div>
           <div class="actions">
             <a class="call" href="tel:${w.phone.replaceAll(" ","")}">Call</a>
-            <a class="whatsapp" target="_blank" href="https://wa.me/${(w.whatsapp || w.phone).replace(/\\D/g,"")}">WhatsApp</a>
+            <a class="whatsapp" target="_blank" href="https://wa.me/${(w.whatsapp || w.phone).replace(/\D/g,"")}">WhatsApp</a>
             <a class="maps" target="_blank" href="${mapsUrl(w)}">Google Maps</a>
+            <button class="btn light edit-btn" data-id="${w.id}" style="padding:10px; font-size:12px; font-weight:bold;">Edit</button>
           </div>
         </article>`;
       }
+
       function renderMap(id, source, selectedId) {
         const selected = source.find(w => w.id === selectedId) || source[0] || workers[0];
+        if(!selected) return;
         $(id).dataset.selected = selected.id;
         $(id).innerHTML = `<div class="map-head">
           <strong>Live Google location: ${selected.fullName}</strong>
@@ -381,10 +423,12 @@
             ${w.fullName} · ${w.city}
           </button>`).join("")}</div>`;
       }
+
       function filtered() {
         const q = $("query").value.trim().toLowerCase();
         return workers.filter(w => {
-          const text = [w.fullName, w.phone, w.city, label(districts,w.districtId), label(professions,w.professionId), ...w.skills].join(" ").toLowerCase();
+          if (!w) return false;
+          const text = [w.fullName, w.phone, w.city, label(districts,w.districtId), label(professions,w.professionId), ...(w.skills || [])].join(" ").toLowerCase();
           return (!q || text.includes(q)) &&
             (!$("district").value || w.districtId === $("district").value) &&
             (!$("profession").value || w.professionId === $("profession").value) &&
@@ -392,195 +436,220 @@
             (!$("status").value || w.workerStatus === $("status").value);
         });
       }
-      function renderStats(target) {
-        const available = workers.filter(w => w.availabilityStatus === "AVAILABLE").length;
-        const active = workers.filter(w => w.workerStatus === "ACTIVE").length;
-        const verified = workers.filter(w => w.isVerified).length;
-        $(target).innerHTML = [["Total workers", workers.length], ["Available now", available], ["Active workers", active], ["Verified profiles", verified]]
-          .map(([k,v]) => `<div class="card stat"><span>${k}</span><strong>${v}</strong></div>`).join("");
-      }
-      function render() {
-        renderStats("stats");
-        renderStats("analyticsStats");
-        $("availableWorkers").innerHTML = workers.filter(w => w.availabilityStatus === "AVAILABLE").slice(0,4).map(workerCard).join("");
-        const result = filtered();
-        $("resultCount").innerHTML = `<strong>${result.length} workers found</strong>`;
-        $("workerList").innerHTML = result.map(workerCard).join("");
-        renderMap("dashboardMap", workers, $("dashboardMap").dataset.selected);
-        renderMap("workerMap", result, $("workerMap").dataset.selected);
-        renderMap("fullMap", workers, $("fullMap").dataset.selected);
-        $("professionList").innerHTML = professions.map(p => {
-          const count = workers.filter(w => w.professionId === p[0]).length;
-          return `<div class="card row"><strong>${p[1]}</strong><span>${count} workers</span></div>`;
-        }).join("");
-        $("analyticsList").innerHTML = districts.map(d => {
-          const count = workers.filter(w => w.districtId === d[0]).length;
-          return count ? `<div class="card row"><strong>${d[1]}</strong><span>${count} workers</span></div>` : "";
-        }).join("");
-      }
-      function openProfile(id) {
-        const w = workers.find(x => x.id === id);
-        if (!w) return;
-        $("modalTitle").textContent = w.fullName;
-        $("modalLead").textContent = `${label(professions,w.professionId)} in ${w.city}, ${label(districts,w.districtId)}`;
-        const profilePhoto = w.profilePhoto ? `<img alt="${w.fullName}" src="${w.profilePhoto}">` : initials(w.fullName);
-        $("modalBody").innerHTML = `<div style="display:flex;gap:18px;align-items:center;margin:18px 0">
-          <div class="profile-photo">${profilePhoto}</div>
-          <div><strong style="display:block;color:var(--navy);font-size:20px">${w.fullName}</strong><span class="meta">${label(professions,w.professionId)} · ${w.city}</span></div>
-        </div>
-        <div class="stats">
-          <div class="card stat"><span>Phone</span><strong style="font-size:20px">${w.phone}</strong></div>
-          <div class="card stat"><span>Availability</span><strong style="font-size:20px">${w.availabilityStatus}</strong></div>
-          <div class="card stat"><span>Status</span><strong style="font-size:20px">${w.workerStatus}</strong></div>
-          <div class="card stat"><span>Town</span><strong style="font-size:20px">${w.city}</strong></div>
-        </div>
-        <p class="lead">${w.bio}</p>
-        <div class="actions">
-          <a class="call" href="tel:${w.phone.replaceAll(" ","")}">Call</a>
-          <a class="whatsapp" target="_blank" href="https://wa.me/${(w.whatsapp || w.phone).replace(/\\D/g,"")}">WhatsApp</a>
-          <a class="maps" target="_blank" href="${mapsUrl(w)}">Open in Google Maps</a>
-          <button class="btn navy" onclick="openEdit('${w.id}')">Edit</button>
-        </div>
-        <iframe title="${w.fullName} exact Google map" style="margin-top:18px;width:100%;height:320px;border:1px solid var(--border);border-radius:8px" loading="lazy" src="https://maps.google.com/maps?q=${w.latitude},${w.longitude}&z=12&output=embed"></iframe>`;
-        $("profileModal").classList.add("open");
-      }
-      function openEdit(id) {
-        const w = id ? workers.find(x => x.id === id) : null;
-        $("profileModal").classList.remove("open");
-        $("editTitle").textContent = w ? "Edit worker" : "Add worker";
-        const form = $("workerForm");
-        form.dataset.id = w ? w.id : "";
-        for (const field of form.elements) {
-          if (!field.name) continue;
-          if (field.name === "profilePhoto") {
-            field.value = "";
-            continue;
-          }
-          if (field.name === "skills") field.value = w ? w.skills.join(", ") : "";
-          else field.value = w ? w[field.name] || "" : "";
-        }
-        $("editModal").classList.add("open");
-      }
-      function showToast() {
-        $("toast").classList.add("show");
-        setTimeout(() => $("toast").classList.remove("show"), 1800);
-      }
-      function updateAuthUi() {
-        $("currentUserEmail").textContent = currentUser ? currentUser : "";
-        $("loginModal").classList.toggle("open", !currentUser);
-      }
-      for (const id of ["district", "profession"]) {
-        const list = id === "district" ? districts : professions;
-        const editSelect = document.querySelector(`#workerForm select[name="${id}Id"]`);
-        list.forEach(item => {
-          $(id).insertAdjacentHTML("beforeend", `<option value="${item[0]}">${item[1]}</option>`);
-          editSelect.insertAdjacentHTML("beforeend", `<option value="${item[0]}">${item[1]}</option>`);
+
+      function globalSearch(q) {
+        q = q.toLowerCase().trim();
+        return workers.filter(w => {
+          if (!w) return false;
+          return [w.fullName, w.phone, w.city, label(districts,w.districtId), label(professions,w.professionId), ...(w.skills || [])].join(" ").toLowerCase().includes(q);
         });
       }
-      towns.forEach(town => {
-        document.querySelector('#workerForm select[name="city"]').insertAdjacentHTML(
-          "beforeend",
-          `<option value="${town[1]}">${town[1]} - ${label(districts, town[2])}</option>`
-        );
-      });
-      document.querySelector('#workerForm select[name="city"]').addEventListener("input", (event) => {
-        const town = townByName(event.target.value);
-        if (town) {
-          document.querySelector('#workerForm select[name="districtId"]').value = town[2];
+
+      function updateDashboard() {
+        const avail = workers.filter(w => w && w.availabilityStatus === "AVAILABLE");
+        $("availableWorkers").innerHTML = avail.slice(0, 4).map(w => workerCard(w)).join("") || '<p class="lead">No available workers.</p>';
+        
+        $("stats").innerHTML = `
+          <div class="card stat"><span>Total Workers</span><strong>${workers.length}</strong></div>
+          <div class="card stat"><span>Available Now</span><strong>${avail.length}</strong></div>
+          <div class="card stat"><span>Verified Professionals</span><strong>${workers.filter(w => w.isVerified).length}</strong></div>
+          <div class="card stat"><span>Districts Covered</span><strong>${new Set(workers.map(w => w.districtId)).size}</strong></div>
+        `;
+        if (avail.length > 0) renderMap("dashboardMap", avail);
+      }
+
+      function updateWorkersPage() {
+        const list = filtered();
+        $("resultCount").textContent = `Found ${list.length} workers matching your search rules.`;
+        $("workerList").innerHTML = list.map(w => workerCard(w)).join("") || '<p class="lead">No workers found.</p>';
+        if (list.length > 0) renderMap("workerMap", list);
+      }
+
+      function updateAnalytics() {
+        const total = workers.length;
+        const active = workers.filter(w => w.workerStatus === "ACTIVE").length;
+        const avail = workers.filter(w => w.availabilityStatus === "AVAILABLE").length;
+        
+        $("analyticsStats").innerHTML = `
+          <div class="card stat"><span>Active Crew</span><strong>${active}</strong></div>
+          <div class="card stat"><span>Bench Count</span><strong>${total - active}</strong></div>
+          <div class="card stat"><span>Utilization Rate</span><strong>${total ? Math.round(((total - avail)/total)*100) : 0}%</strong></div>
+          <div class="card stat"><span>Average Experience</span><strong>${total ? Math.round(workers.reduce((acc, w) => acc + (parseInt(w.experienceYears) || 0), 0) / total) : 0} Yrs</strong></div>
+        `;
+
+        let profMap = {};
+        workers.forEach(w => profMap[w.professionId] = (profMap[w.professionId] || 0) + 1);
+        $("analyticsList").innerHTML = Object.entries(profMap).map(([id, count]) => `
+          <div class="card row">
+            <strong>${label(professions, id)}</strong>
+            <span>${count} Workers Allocation</span>
+          </div>
+        `).join("");
+      }
+
+      function initAppLogic() {
+        updateDashboard();
+        updateWorkersPage();
+        updateAnalytics();
+        
+        // Build reference category screens
+        $("professionList").innerHTML = professions.map(([id, name]) => `
+          <div class="card row"><strong>${name}</strong><span>Discipline ID Reference: ${id}</span></div>
+        `).join("");
+        
+        if (workers.length > 0) renderMap("fullMap", workers);
+      }
+
+      function showToast() {
+        $("toast").classList.add("show");
+        setTimeout(() => $("toast").classList.remove("show"), 2500);
+      }
+
+      function populateFormOptions() {
+        const dSel = $("district"), pSel = $("profession"), fDist = $("formDistrict"), fProf = $("formProfession"), fCity = $("formCity");
+        
+        if (dSel.options.length <= 1) {
+          districts.forEach(([id, name]) => {
+            dSel.add(new Option(name, id));
+            fDist.add(new Option(name, id));
+          });
+          professions.forEach(([id, name]) => {
+            pSel.add(new Option(name, id));
+            fProf.add(new Option(name, id));
+          });
+          towns.forEach(([id, name]) => fCity.add(new Option(name, name)));
+        }
+      }
+
+      // Interaction Event Listeners
+      document.addEventListener("click", (e) => {
+        const tgt = e.target;
+        if (tgt.hasAttribute("data-section")) {
+          document.querySelectorAll("nav button, .section").forEach(el => el.classList.remove("active"));
+          tgt.classList.add("active");
+          $(tgt.getAttribute("data-section")).classList.add("active");
+        }
+        if (tgt.hasAttribute("data-map")) {
+          const mapId = tgt.getAttribute("data-map");
+          const wId = tgt.getAttribute("data-worker");
+          const src = mapId === "dashboardMap" ? workers.filter(w => w.availabilityStatus === "AVAILABLE") : mapId === "workerMap" ? filtered() : workers;
+          renderMap(mapId, src, wId);
+        }
+        if (tgt.classList.contains("edit-btn")) {
+          const w = workers.find(x => x.id === tgt.getAttribute("data-id"));
+          if (w) {
+            $("editTitle").textContent = "Edit Worker Profile";
+            $("editWorkerId").value = w.id;
+            const form = $("workerForm");
+            form.fullName.value = w.fullName;
+            form.phone.value = w.phone;
+            form.profilePhoto.value = w.profilePhoto || "";
+            form.districtId.value = w.districtId;
+            form.professionId.value = w.professionId;
+            form.city.value = w.city;
+            form.experienceYears.value = w.experienceYears || 0;
+            form.availabilityStatus.value = w.availabilityStatus;
+            form.workerStatus.value = w.workerStatus;
+            form.skills.value = (w.skills || []).join(", ");
+            form.bio.value = w.bio || "";
+            $("editModal").classList.add("open");
+          }
+        }
+        if (tgt.hasAttribute("data-close")) {
+          tgt.closest(".modal").classList.remove("open");
         }
       });
-      document.querySelectorAll("nav button[data-section]").forEach(btn => btn.addEventListener("click", () => {
-        document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
-        document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
-        btn.classList.add("active");
-        $(btn.dataset.section).classList.add("active");
-      }));
-      ["query","district","profession","availability","status"].forEach(id => $(id).addEventListener("input", render));
-      $("searchBtn").addEventListener("click", render);
+
+      $("searchBtn").addEventListener("click", updateWorkersPage);
       $("topSearch").addEventListener("input", (e) => {
-        $("query").value = e.target.value;
-        document.querySelector('nav button[data-section="workers"]').click();
-        render();
+        const matches = globalSearch(e.target.value);
+        $("workerList").innerHTML = matches.map(w => workerCard(w)).join("");
       });
-      document.body.addEventListener("click", e => {
-        const card = e.target.closest(".worker");
-        if (card && !e.target.closest("a")) openProfile(card.dataset.id);
-        const mapWorker = e.target.closest(".map-worker");
-        if (mapWorker) {
-          const mapId = mapWorker.dataset.map;
-          const source = mapId === "workerMap" ? filtered() : workers;
-          renderMap(mapId, source, mapWorker.dataset.worker);
-        }
-        if (e.target.matches("[data-close]")) e.target.closest(".modal").classList.remove("open");
+
+      $("addWorkerBtn").addEventListener("click", () => {
+        $("workerForm").reset();
+        $("editWorkerId").value = "";
+        $("editTitle").textContent = "Add New Worker Record";
+        $("editModal").classList.add("open");
       });
-      $("addWorkerBtn").addEventListener("click", () => openEdit());
-      $("pdfNavBtn").addEventListener("click", () => generatePdf());
-      $("loginForm").addEventListener("submit", e => {
+
+      $("workerForm").addEventListener("submit", (e) => {
         e.preventDefault();
-        currentUser = $("loginEmail").value.trim();
+        const fd = new FormData(e.target);
+        const selectedTown = townByName(fd.get("city")) || towns[0];
+        
+        const workerObj = {
+          id: $("editWorkerId").value || null,
+          fullName: fd.get("fullName"),
+          phone: fd.get("phone"),
+          profilePhoto: fd.get("profilePhoto"),
+          districtId: fd.get("districtId"),
+          professionId: fd.get("professionId"),
+          city: fd.get("city"),
+          latitude: selectedTown[3],
+          longitude: selectedTown[4],
+          experienceYears: parseInt(fd.get("experienceYears")) || 0,
+          availabilityStatus: fd.get("availabilityStatus"),
+          workerStatus: fd.get("workerStatus"),
+          bio: fd.get("bio"),
+          skills: fd.get("skills").split(",").map(s => s.trim()).filter(Boolean),
+          isVerified: false
+        };
+        saveWorkerToCloud(workerObj);
+      });
+
+      // Report PDF Generation Setup
+      $("pdfNavBtn").addEventListener("click", () => {
+        let rows = workers.map(w => `
+          <tr>
+            <td>${w.profilePhoto ? `<img class="pdf-photo" src="${w.profilePhoto}" />` : `<div class="pdf-photo-fallback">${initials(w.fullName)}</div>`}</td>
+            <td><strong>${w.fullName}</strong></td>
+            <td>${label(professions, w.professionId)}</td>
+            <td>${w.city}, ${label(districts, w.districtId)}</td>
+            <td>${w.phone}</td>
+            <td>${w.experienceYears || 0} Yrs</td>
+            <td>${w.availabilityStatus}</td>
+          </tr>
+        `).join("");
+
+        $("printReport").innerHTML = `
+          <h1>BY WELISARA - Manpower Roster Report</h1>
+          <p>Generated on ${new Date().toLocaleDateString()} · Active Cloud Sync Database Summary</p>
+          <table>
+            <thead>
+              <tr><th>Photo</th><th>Name</th><th>Discipline</th><th>Location</th><th>Phone Line</th><th>Experience</th><th>Availability</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `;
+        window.print();
+      });
+
+      // Authentication Session UI Guard
+      function updateAuthUi() {
+        if (currentUser) {
+          $("currentUserEmail").textContent = currentUser;
+          $("loginModal").classList.remove("open");
+        } else {
+          $("loginModal").classList.add("open");
+        }
+      }
+
+      $("loginForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        currentUser = $("loginEmail").value;
         localStorage.setItem("byWelisaraUserEmail", currentUser);
         updateAuthUi();
       });
+
       $("logoutBtn").addEventListener("click", () => {
         currentUser = "";
         localStorage.removeItem("byWelisaraUserEmail");
         updateAuthUi();
       });
-      $("workerForm").addEventListener("submit", async e => {
-        e.preventDefault();
-        const data = Object.fromEntries(new FormData(e.target).entries());
-        const existing = workers.find(w => w.id === e.target.dataset.id);
-        const town = townByName(data.city) || towns[0];
-        const uploadedPhoto = await fileToDataUrl(e.target.elements.profilePhoto.files[0]);
-        const next = {
-          id: existing ? existing.id : `w-${Date.now()}`,
-          fullName: data.fullName,
-          phone: data.phone,
-          whatsapp: data.phone,
-          districtId: town[2] || data.districtId,
-          city: town[1],
-          latitude: Number(town[3]),
-          longitude: Number(town[4]),
-          professionId: data.professionId,
-          experienceYears: Number(data.experienceYears || 0),
-          bio: data.bio,
-          availabilityStatus: data.availabilityStatus,
-          workerStatus: data.workerStatus,
-          isVerified: false,
-          skills: String(data.skills || "").split(",").map(s => s.trim()).filter(Boolean),
-          profilePhoto: uploadedPhoto || existing?.profilePhoto || ""
-        };
-        if (existing) Object.assign(existing, next); else workers.unshift(next);
-        saveWorkers();
-        $("editModal").classList.remove("open");
-        render();
-        showToast();
-      });
-      function generatePdf() {
-        const rows = workers.map(w => `<tr>
-          <td>${w.profilePhoto ? `<img class="pdf-photo" alt="${w.fullName}" src="${w.profilePhoto}">` : `<div class="pdf-photo-fallback">${initials(w.fullName)}</div>`}</td>
-          <td>${w.fullName}</td>
-          <td>${label(professions,w.professionId)}</td>
-          <td>${label(districts,w.districtId)}</td>
-          <td>${w.city}</td>
-          <td>${w.phone}</td>
-          <td>${w.availabilityStatus}</td>
-          <td>${w.workerStatus}</td>
-          <td>${w.isVerified ? "Yes" : "No"}</td>
-        </tr>`).join("");
-        $("printReport").style.display = "block";
-        $("printReport").innerHTML = `<h1>BY WELISARA Manpower Bank</h1>
-          <h2>All Workers Current Summary and Status</h2>
-          <p>Generated: ${new Date().toLocaleString()}</p>
-          <table>
-            <thead><tr><th>Photo</th><th>Worker</th><th>Profession</th><th>District</th><th>Town</th><th>Phone</th><th>Availability</th><th>Status</th><th>Verified</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>`;
-        window.print();
-        setTimeout(() => $("printReport").style.display = "none", 500);
-      }
+
+      populateFormOptions();
       updateAuthUi();
-      render();
     </script>
   </body>
 </html>
