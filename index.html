@@ -600,19 +600,24 @@
 
       // Report PDF Generation Setup
       $("pdfNavBtn").addEventListener("click", () => {
-        let rows = workers.map(w => `
-          <tr>
-            <td>${w.profilePhoto ? `<img class="pdf-photo" src="${w.profilePhoto}" />` : `<div class="pdf-photo-fallback">${initials(w.fullName)}</div>`}</td>
+        let rows = workers.map(w => {
+          let photoMarkup = w.profilePhoto 
+            ? '<img class="pdf-photo" src="' + w.profilePhoto + '" />' 
+            : '<div class="pdf-photo-fallback">' + initials(w.fullName) + '</div>';
+            
+          return `<tr>
+            <td>${photoMarkup}</td>
             <td><strong>${w.fullName}</strong></td>
             <td>${label(professions, w.professionId)}</td>
             <td>${w.city}, ${label(districts, w.districtId)}</td>
             <td>${w.phone}</td>
             <td>${w.experienceYears || 0} Yrs</td>
             <td>${w.availabilityStatus}</td>
-          </tr>
-        `).join("");
+          </tr>`;
+        }).join("");
 
-        $("printReport").innerHTML = `
+        const reportEl = document.getElementById("printReport");
+        reportEl.innerHTML = `
           <h1>BY WELISARA - Manpower Roster Report</h1>
           <p>Generated on ${new Date().toLocaleDateString()} · Active Cloud Sync Database Summary</p>
           <table>
@@ -621,6 +626,10 @@
             </thead>
             <tbody>${rows}</tbody>
           </table>
+        `;
+        
+        window.print();
+      });
         `;
         window.print();
       });
